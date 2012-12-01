@@ -6,7 +6,7 @@ I was always getting asked by my coworkers to help them with their merges and I 
 
 Level 7 in the prototype is really hard if you guys want a challenge.
 
-Also excuse the bugginess of the prototype. If you want to really play the game you should play the mobile version.
+Also excuse the bugginess of the prototype. If you want to really play the game without bugs you should play the mobile version.
 
 Here are some screenshots of the final product: 
 
