@@ -1,0 +1,116 @@
+h1, h2, h3{
+  margin-top: 0px;
+  margin-bottom: 2px;
+}
+
+#move_modal{
+  float: left;
+  position: relative;
+  width: 460px;
+  height:auto;
+  margin: 5px;
+  margin-top: 5px;
+  border: solid 1px black;
+  padding: 5px;
+  z-index: 1000;
+}
+
+#level_description {
+  float: left;
+  position: relative;
+  width: 440;
+  height:35px;
+  margin: 5px;
+  margin-bottom: 0px;
+  z-index: 1000;
+}
+
+canvas{
+  border: solid 1px black;
+  position:absolute;
+  z-index: 1;
+}
+
+#game_instructions {
+  position: relative;
+  border: 1px solid black;
+  height: auto;
+  width: 400px;
+  margin-left: 10px;
+  padding: 10px;
+  float: left;
+}
+
+.instructions {
+  display: none;
+  margin: 5px;
+}
+
+.secondary_instructions {
+  display: none;
+}
+
+.tertiary_instructions {
+  display: none;
+}
+
+#menu {
+  position: relative;
+  border: 1px solid black;
+  height: auto;
+  width: 400px;
+  margin-left: 10px;
+  margin-top: 10px;
+  padding: 10px;
+  float: left;
+}
+
+.clear {
+  clear: both;
+}
+
+#container {
+  width: 600px;
+}
+
+#right_column_container {
+  margin-left: 500px;
+  width: 400px;
+}
+
+#dialog-form{
+  display: none;
+}
+
+#done_solving_level_maker{
+  display:none;
+}
+
+#level_maker_instructions {
+  display:none;
+  color: red;
+}
+
+#choose_color {
+  display:none;
+}
+
+#choose_parent {
+  display:none;
+}
+
+#solving_level {
+  display:none;
+}
+
+#level_maker_instructions{
+  float: left;
+  position: relative;
+  width: 460px;
+  height:auto;
+  margin: 5px;
+  margin-top: 5px;
+  border: solid 1px black;
+  padding: 5px;
+  z-index: 1000;
+}

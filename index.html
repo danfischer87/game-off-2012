@@ -1,0 +1,1732 @@
+<!DOCTYPE>
+<html>
+  <head>
+      <title>Git Master</title>
+      <link href="application.css" media="screen" rel="stylesheet" type="text/css" />
+      <script src="jquery.min.js" type="text/javascript"></script>
+      <script src="jquery-ui-1.8.23.custom.min.js" type="text/javascript"></script>
+      <link href="ui-lightness/jquery-ui-1.8.23.custom.css" media="screen" rel="stylesheet" type="text/css" />
+      <!-- <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js" type="text/javascript"></script> -->
+      
+      <script type="text/javascript">
+          window.onload = function () {
+              var canvas = document.getElementById('canvas');
+              var ctx = canvas.getContext("2d");
+              
+              // Dot Coordinate System
+              // 
+              // Row 
+              //      2|
+              //      1|
+              //      0|_________
+              //        0 1 2 3
+              //        Columns
+              
+              
+              
+              ////////////////////////////////////////////////////////////////////////////
+              //////// BEGIN CONSTANTS AND GLOBAL VARIABLES
+              
+              BOTTOM_LEFT_X = 60;
+              BOTTOM_LEFT_Y = 600;
+              SPACING = 60;
+              DOT_RADIUS = 13;
+              currently_clicked = null;
+              secondary_clicked = null;
+              tertiary_clicked = null;
+              current_level = null;
+              current_dots = null;
+              removed_dots = [];
+              current_master_branch = null;
+              all_branches = null;
+              move_in_progress = null;
+              all_levels = [];
+              placed_dots = [];
+              level_maker_on = false;
+              currently_selected_palette_dot = null;
+              new_level_starting_positions_string = "";
+              new_level_solution_dots_string = "";
+              new_level_starting_positions_string_array = "";
+              new_level_solution_dots_string_array = "";
+              new_level_num_placed = 0;
+              
+              
+              //////// END CONSTANTS AND GLOBAL VARIABLES       
+              ////////////////////////////////////////////////////////////////////////////
+              
+              ////////////////////////////////////////////////////////////////////////////
+              //////// BEGIN DOTS
+              function Dot(color, r, y_row_position, x_column_position, parent_dot, clickable) {
+                var bottom_left_x = BOTTOM_LEFT_X;
+                
+                if (typeof clickable != 'undefined' && clickable === true) {
+                  bottom_left_x = BOTTOM_LEFT_X + 75;
+                }
+                else {
+                  clickable = false;
+                }
+                
+                this.fillStyle    = color;
+                this.positionX    = bottom_left_x + (x_column_position*SPACING);
+                this.positionY    = BOTTOM_LEFT_Y - (y_row_position*SPACING);
+                this.radius       = r;
+                this.sAngle       = 0;
+                this.eAngle       = 2 * Math.PI;
+                this.clockwise    = false;
+                this.y_row_position = y_row_position;
+                this.x_column_position  = x_column_position;
+                this.clickable    = clickable;
+                this.parent_dot = parent_dot;
+                this.original_parent_dot = parent_dot;
+                this.new_level_name = null;
+                this.new_level_id = null;
+              }
+              
+              Dot.prototype.reset_position = function(x_column_position, y_row_position){ 
+                var bottom_left_x = BOTTOM_LEFT_X;
+                
+                if (typeof this.clickable != 'undefined' && this.clickable === true) {
+                  bottom_left_x = BOTTOM_LEFT_X + 75;
+                }
+                
+                this.y_row_position = y_row_position;
+                this.x_column_position  = x_column_position;
+                this.positionX    = (bottom_left_x + (x_column_position*SPACING));
+                this.positionY    = (BOTTOM_LEFT_Y - (y_row_position*SPACING));
+                
+                console.log(this.fillStyle + " dot is being reset to row: " + this.y_row_position + ", column: " + this.x_column_position + ", with canvas coordinates of (" + this.positionX + ", " + this.positionY + ").");
+              };
+              
+              ClickableDot.prototype = new Dot(); // Here's where the inheritance occurs
+              // ClickableDot.prototype.constructor = ClickableDot;        
+              function ClickableDot(color, r, parent_dot, on_master_branch) {
+                Dot.call(this, color, r, 0, 0, parent_dot, true);
+                
+                this.on_master_branch = on_master_branch;
+                this.original_on_master_branch = on_master_branch;
+                
+                this.num_children = 0;
+                this.children_placed = 0;
+                this.children_placed_not_on_master = 0;
+              }
+              
+              function PaletteDot(color, r) {
+                this.fillStyle = color;
+                this.radius = r;
+                this.positionX    = null;
+                this.positionY    = null;
+                this.sAngle       = 0;
+                this.eAngle       = 2 * Math.PI;
+                this.clockwise    = false;
+              }
+              
+              PaletteDot.prototype.draw = function(){ 
+                SHADOW_OFFSET_SIZE = 3;
+                SHADOW_BLUR_SIZE = 3;
+                
+                if(currently_selected_palette_dot == this) {
+                  // Draw with shadow;
+                  ctx.save();
+                  ctx.fillStyle = this.fillStyle;
+                  ctx.shadowOffsetX = SHADOW_OFFSET_SIZE; // Sets the shadow offset x, positive number is right
+                  ctx.shadowOffsetY = SHADOW_OFFSET_SIZE; // Sets the shadow offset y, positive number is down
+                  ctx.shadowBlur = SHADOW_BLUR_SIZE; // Sets the shadow blur size
+                  ctx.shadowColor = 'Black'; // Sets the shadow color
+                  ctx.beginPath();
+                  ctx.arc(this.positionX, this.positionY, this.radius, this.sAngle, this.eAngle, this.clockwise);
+                  ctx.closePath();
+                  ctx.fill();
+                  ctx.restore();
+                }
+                else {
+                  // Remove shadow
+                  ctx.clearRect((this.positionX - this.radius), (this.positionY - this.radius), ((this.radius*2) + SHADOW_BLUR_SIZE + SHADOW_OFFSET_SIZE), ((this.radius*2) + SHADOW_BLUR_SIZE + SHADOW_OFFSET_SIZE));
+                  
+                  ctx.fillStyle = this.fillStyle;
+                  ctx.beginPath();
+                  ctx.arc(this.positionX, this.positionY, this.radius, this.sAngle, this.eAngle, this.clockwise);
+                  ctx.closePath();
+                  ctx.fill();
+                }
+              };
+              
+              Dot.prototype.draw = function(){ 
+                // console.log("Drawing the " + this.fillStyle + " dot.");
+                // console.log(this.fillStyle + " dot is: " + JSON.stringify(this));
+
+                // this.draw_surrounding_quadrant();
+                
+                if(this.parent_dot != null) {
+                  this.draw_line_to_parent();
+                }
+                
+                ctx.fillStyle = this.fillStyle;
+                ctx.beginPath();
+                ctx.arc(this.positionX, this.positionY, this.radius, this.sAngle, this.eAngle, this.clockwise);
+                ctx.closePath();
+                ctx.fill();
+                
+
+              };
+              
+              Dot.prototype.draw_line_to_parent = function(){ 
+                if((this.on_master_branch && this.parent_dot.on_master_branch) || this.clickable == false) {
+                  ctx.strokeStyle = "Yellow";
+                }
+                else {
+                  ctx.strokeStyle = "Black";
+                }
+                
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(this.positionX,this.positionY);
+                ctx.lineTo(this.parent_dot.positionX,this.parent_dot.positionY);
+                ctx.stroke();
+              };
+              
+              Dot.prototype.draw_surrounding_quadrant = function(){ 
+                // ctx.fillStyle = this.fillStyle;
+                // ctx.globalAlpha = 0.3;
+                // ctx.beginPath();
+                // ctx.rect(this.positionX - this.radius, this.positionY- this.radius, this.radius*2,  this.radius*2);
+                // ctx.closePath();
+                // ctx.fill();
+                // ctx.globalAlpha = 1;
+              };
+              
+              Dot.prototype.calculate_num_children = function(){
+                var count_of_children = 0;
+                
+                for(var i=0; i < current_dots.length; i++) {
+                  if(current_dots[i].parent_dot == this) {
+                    count_of_children++;
+                  }
+                }
+                
+                console.log("Num children of " + this.fillStyle + " is: " + count_of_children);
+                return count_of_children;
+              }
+              
+              Dot.prototype.children = function(){
+                var children = [];
+                
+                for(var z=0; z < current_dots.length; z++) {
+                  
+                  if(current_dots[z].parent_dot != null && current_dots[z].parent_dot == this) {
+                    // alert(current_dots[z].parent_dot.fillStyle + this.fillStyle);
+                    children.push(current_dots[z]);
+                  }
+                }
+                
+                return children;
+              }
+              
+              Dot.prototype.generate_string_of_children = function(rand_level_id){
+                var children = this.children();
+                var parent_name = this.new_level_name;
+                
+                // "clickable_dot_838271_newlevelnumplaced = new ClickableDot('Navy', DOT_RADIUS, eval('parent_name'), true);"
+                
+                if(children.length > 0) {
+                  for(var y=0; y < children.length; y++) {
+                    var child = children[y];
+                    new_level_starting_positions_string = new_level_starting_positions_string + "clickable_dot_" + rand_level_id + "_" + new_level_num_placed + " = new ClickableDot('" + child.fillStyle + "', DOT_RADIUS, " + parent_name + ", " + child.on_master_branch + ");\n"
+                    child.new_level_name = "clickable_dot_" + rand_level_id + "_" + new_level_num_placed;
+                    new_level_starting_positions_string_array = new_level_starting_positions_string_array + child.new_level_name + ", "
+                    new_level_num_placed++;
+                    
+                    // Recursively remove all of the child's children
+                    child.generate_string_of_children(rand_level_id);
+                  }                  
+                }
+              }
+              
+              Dot.prototype.generate_solution_string_of_children = function(rand_level_id){
+                // var dot_7_2 = new Dot("Gray", DOT_RADIUS, 1, 0, dot_7_1);
+                var children = this.children();
+                var parent_name = this.new_level_name;
+                
+                if(children.length > 0) {
+                  for(var y=0; y < children.length; y++) {
+                    var child = children[y];
+                    if(child.on_master_branch == true) {
+                      new_level_solution_dots_string = new_level_solution_dots_string + "dot_" + rand_level_id + "_" + new_level_num_placed + " = new Dot('" + child.fillStyle + "', DOT_RADIUS, "+ new_level_num_placed + ", 0, " +   parent_name + ");\n"
+                      child.new_level_name = "dot_" + rand_level_id + "_" + new_level_num_placed;
+                      new_level_num_placed++;
+                      new_level_solution_dots_string_array = new_level_solution_dots_string_array + child.new_level_name + ", "
+                    
+                      // Recursively remove all of the child's children
+                      child.generate_solution_string_of_children(rand_level_id);
+                    }
+                  }                  
+                }
+              }
+              
+              Dot.prototype.recursively_place_children = function(){
+                var children = this.children();
+                // console.log("Children of " + this.fillStyle + " are: " + JSON.stringify(children));
+                // console.log("Children of " + this.fillStyle + " length: " + children.length);
+                this.draw();
+                placed_dots.push(this);
+                
+                for(var m=0; m < children.length; m++) {
+                  var child = children[m];
+                  console.log("Drawing => " + child.fillStyle);
+                
+                  if(child.on_master_branch == true) {
+                    console.log(child.fillStyle + " on master branch");
+                    child.reset_position(0, (child.parent_dot.y_row_position + 1));
+                  }
+                  else {
+                    child.parent_dot.children_placed_not_on_master++;
+                    
+                    if(child.parent_dot.on_master_branch == true && child.on_master_branch == false) {
+                      // if(child.parent_dot.children_placed == 0) {
+                        child.reset_position((child.parent_dot.children_placed_not_on_master), (child.parent_dot.y_row_position + 1));
+                      // }
+                      // child.reset_position((child.parent_dot.x_column_position + child.parent_dot.children_placed + 1), (child.parent_dot.y_row_position + 1));
+                    }
+                    else {
+                      child.reset_position((child.parent_dot.x_column_position + child.parent_dot.children_placed), (child.parent_dot.y_row_position + 1));
+                    }
+                    
+                    var times_attempted = 0;
+                    while(child.collides_with_placed_dots() == true) {
+                      if(times_attempted > 10) {
+                        alert("Sorry, it appears we've encountered a problem placing dots");
+                        break;
+                      }
+                      
+                      if((child.x_column_position + 1) < 6) {
+                        child.reset_position((child.x_column_position + 1), child.y_row_position);
+                      }
+                      else {
+                        child.reset_position(child.x_column_position, (child.y_row_position + 1));
+                      }
+                      times_attempted++;
+                    }
+                    
+                    console.log(child.fillStyle + " not on master branch");
+                    console.log("Children placed by parent:" + child.parent_dot.children_placed);
+                  }
+                  
+                  console.log("children placed for parent before: " + child.parent_dot.children_placed);
+                  child.parent_dot.children_placed++;
+                  console.log("children placed for parent after: " + child.parent_dot.children_placed);
+                  
+                  child.recursively_place_children();
+                }
+              }
+              
+              Dot.prototype.remove_children = function(){
+                var children = this.children();
+                console.log("Checking if I should remove " + children.length +" children: " + JSON.stringify(children));
+                
+                if(children.length > 0) {
+                  for(var y=0; y < children.length; y++) {
+                    var child = children[y];
+                  
+                    
+                    if(child.on_master_branch == true) {
+                      // console.log("The child: " + child.fillStyle + " is on the master branch so I am not removing it");
+                      // console.log("Parent dot being reset for " + child.fillStyle + " to: " + this.parent_dot.fillStyle);
+                      
+                      child.parent_dot = this.parent_dot;
+                      
+                      if(child.parent_dot == null) {
+                        child.reset_position(0, 0);
+                      }
+                      
+                      // console.log("The " + current_dots.length + " current dots are: " + JSON.stringify(current_dots));
+                    }
+                    else {
+                      console.log("Removing child: " + child.fillStyle);
+                      //Remove the child itself
+                      child.remove_self();
+                      // Recursively remove all of the child's children
+                      child.remove_children();
+                    }
+                  }                  
+                }
+                
+                // console.log("At end of remove_children " + current_dots.length + " current dots are: " + JSON.stringify(current_dots));
+              }
+              
+              Dot.prototype.add_self_and_child_to_master_branch = function(true_or_false){
+                var children = this.children();
+                console.log("Adding " + this.fillStyle + " dot to master branch");
+                
+                this.on_master_branch = true_or_false;
+                
+                if(children.length > 0) {
+                  for(f=0; f < 1; f++) {
+                    var child = children[f];
+                    
+                    child.add_self_and_child_to_master_branch(true_or_false);
+                  }                  
+                }
+              }
+              
+              Dot.prototype.remove_self_and_child_from_master_branch = function(){
+                var children = this.children();
+                console.log("Adding " + this.fillStyle + " dot to master branch");
+                
+                this.on_master_branch = false;
+                
+                if(children.length > 0) {
+                  for(g=0; g < children.length; g++) {
+                    var child = children[g];
+                    
+                    child.remove_self_and_child_from_master_branch();
+                  }                  
+                }
+              }
+              
+              Dot.prototype.is_root_dot = function(){
+                if(this.parent_dot === null) {
+                  return true;
+                }
+                else {
+                  return false;
+                }
+              }
+              
+              // Dot.prototype.initialize_children = function(){
+              //   var children = this.children_new_level();
+              //   
+              //   if(children.length > 0) {
+              //     for(var y=0; y < children.length; y++) {
+              //       var child = children[y];
+              //       child.
+              //       
+              //       child.initialize_children();
+              // 
+              //     }                  
+              //   }
+              // }
+
+              Dot.prototype.remove_self = function(){
+                // console.log("Before removing self, " + current_dots.length + " current dots are: " + JSON.stringify(current_dots));
+                for(r = 0; r < current_dots.length; r++) {
+                  if(current_dots[r] == this) {
+                    console.log("I am removing myself, currently_clicked " + currently_clicked.fillStyle);
+                    // alert("Starting position dots before remove: " + current_level.starting_position_dots);
+                    removed_dots.push(current_dots[r]);
+                    current_dots.splice(r, 1);
+                    // alert("Starting position dots before remove: " + current_level.starting_position_dots);
+                    // 
+                    // alert("Removed dots: " + JSON.stringify(removed_dots));
+                    
+                    break;
+                  }
+                } 
+                
+                // console.log("Before removing self, " + current_dots.length + " current dots are: " + JSON.stringify(current_dots));
+              }
+              
+              Dot.prototype.set_self_and_all_parents_to_master_branch = function(){
+                this.on_master_branch = true;
+                console.log("Setting " + this.fillStyle + " dot to on master branch");
+                
+                if(this.parent_dot != null) {
+                  this.parent_dot.set_self_and_all_parents_to_master_branch();
+                } 
+              }
+              
+              Dot.prototype.collides_with_placed_dots = function(){
+                var collides = false;
+
+                for(var v=0; v < placed_dots.length; v++) {
+                  if (pointInCircle(placed_dots[v].positionX, placed_dots[v].positionY, this) == true && placed_dots[v] != this) {
+                    console.log(this.fillStyle + " collides with already placed " + placed_dots[v].fillStyle);
+                    console.log("(" + placed_dots[v].positionX + ", " +  placed_dots[v].positionY + ") " + "(" + this.positionX + ", " +  this.positionY + ")");
+                    collides = true;
+                    break;
+                  }
+                }
+                
+                return collides;
+              }
+              
+              Dot.prototype.is_descendant_of = function(ancestor_dot){
+                var parent_to_check = this.parent_dot;
+                var is_descendant = false;
+                
+                while(parent_to_check != null) {
+                  if(parent_to_check == ancestor_dot) {
+                    is_descendant = true;
+                    break;
+                  }
+                  else {
+                    parent_to_check = parent_to_check.parent_dot;
+                  }        
+                }
+                
+                return is_descendant;
+              }
+              
+              Dot.prototype.already_has_child_on_master = function(){
+                var children = this.children();
+                var has_child_on_master = false;
+                
+                for(n = 0; n < children.length; n++) {
+                  if(children[n].on_master_branch == true) {
+                    has_child_on_master = true;
+                    break;
+                  }
+                }
+                
+                return has_child_on_master;
+              }
+              
+              function pointInCircle(clickPointX, clickPointY, shape) {
+                  var distX = Math.abs(clickPointX - shape.positionX),
+                      distY = Math.abs(clickPointY - shape.positionY),
+                      dist = Math.sqrt(distX * distX + distY * distY);
+                  return dist < shape.radius;
+              }
+              
+              function checkCollisionWithPaletteDots(e) {
+                if(level_maker_on == true) {
+                  for(var pd = 0; pd < color_palette_dots.length; pd++){
+                    if (pointInCircle(e.offsetX, e.offsetY, color_palette_dots[pd]) == true) {
+                      console.log(color_palette_dots[pd].fillStyle + " palette dot clicked!");
+                      currently_selected_palette_dot = color_palette_dots[pd];
+                      add_palette_dots();
+                      
+                      // If it is the first dot make it the root dot and draw it
+                      if(current_dots == null) {
+                        var root_level_maker_dot = new ClickableDot(color_palette_dots[pd].fillStyle, DOT_RADIUS, null, true);
+                        current_dots = [root_level_maker_dot];
+                        
+                        recursively_place_dots();
+                        currently_selected_palette_dot = null;
+                        $(".level_maker_instruction").hide();
+                        $(".level_maker_instruction#choose_color").show();
+                      }
+                      else {
+                        $(".level_maker_instruction#choose_color").hide();
+                        $(".level_maker_instruction#choose_parent").show();
+                      }
+                    }
+                  }
+                }
+              }
+              
+              function checkCollisionWithClickableDots(e) {
+                if(current_dots != null) {
+                  for(var num = 0; num < current_dots.length; num++){
+                    // alert("im in here: " + num);
+                    if (pointInCircle(e.offsetX, e.offsetY, current_dots[num]) == true) {
+                      if(level_maker_on == true) {
+                        if(currently_selected_palette_dot == null) {
+                          alert("You must choose a color dot before you choose a dot to connect it to.");
+                        }
+                        else {
+                          if(current_dots[num].on_master_branch == true) {
+                            if(current_dots[num].already_has_child_on_master() == false) {
+                              var answer = confirm("Do you want to add this to the solution line? Click cancel if you want to add it but not to the solution line.");
+                              if (answer){
+                                // Add to solution line
+                                current_dots.push(new ClickableDot(currently_selected_palette_dot.fillStyle, DOT_RADIUS, current_dots[num], true));
+                              }
+                              else{
+                                // Don't add to solution line
+                                current_dots.push(new ClickableDot(currently_selected_palette_dot.fillStyle, DOT_RADIUS, current_dots[num], false));
+                              }
+                            }
+                            else {
+                              // Don't add to solution line
+                              current_dots.push(new ClickableDot(currently_selected_palette_dot.fillStyle, DOT_RADIUS, current_dots[num], false));
+                            }
+                          }
+                          else {
+                            current_dots.push(new ClickableDot(currently_selected_palette_dot.fillStyle, DOT_RADIUS, current_dots[num], false));
+                          }
+                          
+                          recursively_place_dots();
+                          currently_selected_palette_dot = null;
+                          $(".level_maker_instruction#choose_parent").hide();
+                          $(".level_maker_instruction#choose_color").show();
+                          add_palette_dots();
+                        }
+                      }
+                      else {
+                        if (move_in_progress != null) {
+                          assign_click(current_dots[num]);
+                          
+                          if(currently_clicked != null) {
+                            if (required_secondary_click_not_chosen_yet() == true) {
+                              show_secondary_instructions();
+                            }
+                            else if(required_tertiary_click_not_chosen_yet() == true && secondary_clicked == top_of_column(0) && options_for_master_branch_on_rebase() > 1) {
+                              show_tertiary_instructions();
+                            }
+                            else {
+                              make_move();
+                            }
+                          }
+                        }
+                        else {
+                          alert("You need to choose a move before you select a dot!");
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              
+              function assign_click(dot) {
+                if (currently_clicked == null) {
+                  var click_allowed = allowed_as_clicked(dot);
+                  
+                  if (click_allowed[0] == true) {
+                    currently_clicked = dot;
+                  }
+                  else {
+                     alert(click_allowed[1]);
+                  }
+                }
+                else if (currently_clicked != null && secondary_clicked == null) {
+                  var click_allowed = allowed_as_secondary_clicked(dot);
+                  
+                  if (click_allowed[0] == true) {
+                    secondary_clicked = dot;
+                  }
+                  else {
+                    alert(click_allowed[1]);
+                  }
+                }
+                else if (currently_clicked != null && secondary_clicked != null) {
+                  var click_allowed = allowed_as_tertiary_clicked(dot);
+                  
+                  if (click_allowed[0] == true) {
+                    tertiary_clicked = dot;
+                  }
+                  else{
+                    alert(click_allowed[1]);
+                  }
+                }
+              }
+              
+              function allowed_as_clicked(dot) {
+                response_array = [true];
+                
+                if(move_in_progress == "rebase" && dot.is_root_dot() == true) {
+                  response_array = [false, "You cannot move the bottommost dot with a rebase. Choose again."];
+                }
+                
+                return response_array;
+              }
+              
+              function allowed_as_secondary_clicked(dot) {
+                response_array = [true];
+                
+                if(move_in_progress == "rebase" && dot.is_descendant_of(currently_clicked) == true) {
+                  response_array = [false, "You cannot rebase on top of a dot that is on top of the first one you clicked. Choose again."];
+                }
+                
+                return response_array;
+              }
+              
+              function allowed_as_tertiary_clicked(dot) {
+                response_array = [true];
+                
+                return response_array;
+              }
+              //////// END DOTS           
+              ////////////////////////////////////////////////////////////////////////////
+              
+              
+              function required_secondary_click_not_chosen_yet() {
+                if((move_in_progress == "rebase") && secondary_clicked == null) { //|| move_in_progress == "reset"
+                  return true;
+                }
+                else {
+                  return false;
+                }
+              }
+              
+              function required_tertiary_click_not_chosen_yet() {
+                if((move_in_progress == "rebase") && tertiary_clicked == null) {
+                  return true;
+                }
+                else {
+                  return false;
+                }
+              }
+              
+              function show_secondary_instructions() {
+                $(".first_instructions").hide();
+                $(".instructions#" + move_in_progress + " .secondary_instructions").show();
+              }
+              
+              function show_tertiary_instructions() {
+                options_for_master_branch_on_rebase();
+                $(".instructions#" + move_in_progress + " .secondary_instructions").hide();
+                $(".instructions#" + move_in_progress + " .tertiary_instructions").show();
+              }
+              
+              function Level(rebases, resets, copies, removes, cherry_picks, solution_dots, starting_position_dots, level_number, level_name) {
+                this.rebases = rebases;
+                this.rebase_used = 0;
+                
+                this.resets = resets;
+                this.reset_used = 0;
+                
+                this.copies = copies;
+                this.copy_used = 0;
+                
+                this.removes = removes;
+                this.remove_used = 0;
+                
+                this.cherry_picks = cherry_picks;
+                this.cherry_pick_used = 0;
+                
+                this.solution_dots = solution_dots;
+                this.starting_position_dots = starting_position_dots;
+                
+                this.level_number = level_number;
+                this.level_name = level_name;
+              }
+              
+              Level.prototype.begin = function(){
+                $("#level_description").html("<h3>Level " + this.level_number + ": " + this.level_name + "</h3>");
+                
+                // Add back removed dots
+                // alert("Removed dots length: " + removed_dots.length)
+                // alert("Current dots length before: " + current_dots.length)
+                
+                current_dots = current_dots.concat(removed_dots);
+                this.starting_position_dots = this.starting_position_dots.concat(removed_dots);
+                
+                // alert("Current dots length after: " + current_dots.length)
+                // alert("Starting position dots: " + this.starting_position_dots.length);
+                
+                clear_whole_canvas();
+                this.reset_starting_dots();
+                
+                removed_dots = [];
+                
+                current_level = this;
+                current_dots = this.starting_position_dots;
+                
+                // alert("Current dots length after set to starting position dots: " + current_dots.length);
+                
+                this.restart_moves_counters();
+                
+                // place_all_dots();
+                for (i=0; i < this.solution_dots.length ; i++) {
+                  this.solution_dots[i].draw();
+                }
+                
+                recursively_place_dots();
+                draw_dividing_line();
+                openMoveOptions();
+              };
+              
+              Level.prototype.restart_moves_counters = function(){
+                this.rebase_used = 0;
+                this.reset_used = 0;
+                this.copy_used = 0;
+                this.remove_used = 0;
+                this.cherry_pick_used = 0;
+              };
+              
+              function draw_dividing_line() {
+                ctx.save();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = "Gray";
+                ctx.beginPath();
+                ctx.moveTo(100,800);
+                ctx.lineTo(100,280);
+                ctx.stroke();
+                ctx.restore();
+                
+                ctx.save();
+                ctx.fillStyle = "Black";
+                ctx.translate(136, 770);
+                ctx.font = "12px sans-serif";
+                ctx.rotate(-Math.PI/2);
+                ctx.textAlign = "center";
+                ctx.fillText("Your Solution Line", 100, 0);
+                ctx.restore();
+                
+                ctx.save();
+                ctx.fillStyle = "Black";
+                ctx.translate(62, 745);
+                ctx.font = "12px sans-serif";
+                ctx.rotate(-Math.PI/2);
+                ctx.textAlign = "center";
+                ctx.fillText("Goal Line", 100, 0);
+                ctx.restore();
+                
+                ctx.save();
+                ctx.fillStyle = "Black";
+                ctx.translate(135, 790);
+                ctx.font = "12px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("THESE DOTS ARE CLICKABLE DURING MOVES", 130, 0);
+                ctx.restore();
+              }
+              
+              Level.prototype.reset_starting_dots = function(){
+                // alert("Reseting Starting dots length is: " + this.starting_position_dots.length);
+                for(t=0; t < this.starting_position_dots.length; t++) {
+                  var dot = this.starting_position_dots[t];
+                  
+                  dot.parent_dot = dot.original_parent_dot;
+                  dot.on_master_branch = dot.original_on_master_branch;
+                }
+              };
+              
+              Level.prototype.solution_colors = function(){
+                var solution_colors_array = [];
+                
+                for (i=0; i < this.solution_dots.length ; i++) {
+                  var dot = this.solution_dots[i];
+                  
+                  solution_colors_array[dot.y_row_position] = dot.fillStyle;
+                }
+                
+                return solution_colors_array;
+              };
+              
+
+              
+              ////////////////////////////////////////// LEVEL 1 DEFINITION
+              var dot_1_1 = new Dot("Navy", DOT_RADIUS, 0, 0, null);
+              var dot_1_2 = new Dot("Red",  DOT_RADIUS, 1, 0, dot_1_1);
+              var dot_1_3 = new Dot("Green", DOT_RADIUS, 2, 0, dot_1_2);
+              level1_solution = [dot_1_1, dot_1_2, dot_1_3];
+              
+              var clickableDot_1_1 = new ClickableDot("Navy", DOT_RADIUS, null, true);
+              var clickableDot_1_2 = new ClickableDot("Red", DOT_RADIUS, clickableDot_1_1, true);
+              var clickableDot_1_3 = new ClickableDot("Green", DOT_RADIUS, clickableDot_1_1, false);
+              level1_starting_dots = [clickableDot_1_1, clickableDot_1_2, clickableDot_1_3]
+              
+              level1 = new Level(0, 0, 0, 0, 1, level1_solution, level1_starting_dots, 1, "Learn To Cherry-Pick");
+              all_levels.push(level1);
+              
+              current_level = level1;
+              current_dots = level1_starting_dots;
+              ///////////////////////////////////////// END LEVEL 1 DEFINITION
+              
+              ////////////////////////////////////////// LEVEL 2 DEFINITION
+              var dot_2_1 = new Dot("Navy", DOT_RADIUS, 0, 0, null);
+              var dot_2_2 = new Dot("Red",  DOT_RADIUS, 1, 0, dot_2_1);
+              var dot_2_3 = new Dot("Green", DOT_RADIUS, 2, 0, dot_2_2);
+              var dot_2_4 = new Dot("Orange", DOT_RADIUS, 3, 0, dot_2_3);
+              level2_solution = [dot_2_1, dot_2_2, dot_2_3, dot_2_4];
+              
+              var clickableDot_2_1 = new ClickableDot("Navy", DOT_RADIUS, null, true);
+              var clickableDot_2_2 = new ClickableDot("Green", DOT_RADIUS, clickableDot_2_1, false);
+              var clickableDot_2_3 = new ClickableDot("Red", DOT_RADIUS, clickableDot_2_1, true);
+              var clickableDot_2_4 = new ClickableDot("Orange", DOT_RADIUS, clickableDot_2_2, false);
+              
+              level2_starting_dots = [clickableDot_2_1, clickableDot_2_2, clickableDot_2_3, clickableDot_2_4];
+              
+              
+              level2 = new Level(1, 0, 0, 0, 0, level2_solution, level2_starting_dots, 2, "Learn To Rebase");
+              all_levels.push(level2);
+              // current_level = level2;
+              // current_dots = level2_starting_dots;
+              ///////////////////////////////////////// END LEVEL 2 DEFINITION
+              
+              ////////////////////////////////////////// LEVEL 3 DEFINITION
+              var dot_3_1 = new Dot("Navy", 15, 0, 0, null);
+              var dot_3_2 = new Dot("Green",  15, 1, 0, dot_3_1);
+
+              level3_solution = [dot_3_1, dot_3_2];
+              
+              var clickableDot_3_1 = new ClickableDot("Navy", DOT_RADIUS, null, true);
+              var clickableDot_3_2 = new ClickableDot("Red", DOT_RADIUS, clickableDot_3_1, true);
+              var clickableDot_3_3 = new ClickableDot("Green", DOT_RADIUS, clickableDot_3_2, true);
+              
+              level3_starting_dots = [clickableDot_3_1, clickableDot_3_2, clickableDot_3_3];
+              
+              level3 = new Level(0, 0, 0, 1, 0, level3_solution, level3_starting_dots, 3, "Learn To Remove");
+              all_levels.push(level3);
+              // current_level = level3;
+              // current_dots = level3_starting_dots;
+              ///////////////////////////////////////// END LEVEL 3 DEFINITION
+              
+              ////////////////////////////////////////// LEVEL 4 DEFINITION
+              var dot_4_1 = new Dot("Navy", DOT_RADIUS, 0, 0, null);
+              var dot_4_2 = new Dot("Green",  DOT_RADIUS, 1, 0, dot_4_1);
+              var dot_4_3 = new Dot("Red", DOT_RADIUS, 2, 0, dot_4_2);
+              var dot_4_4 = new Dot("Orange", DOT_RADIUS, 3, 0, dot_4_3);
+
+              level4_solution = [dot_4_1, dot_4_2, dot_4_3, dot_4_4];
+              
+              var clickableDot_4_1 = new ClickableDot("Navy", DOT_RADIUS, null, true);
+              var clickableDot_4_2 = new ClickableDot("Green", DOT_RADIUS, clickableDot_4_1, true);
+              var clickableDot_4_3 = new ClickableDot("Red", DOT_RADIUS, clickableDot_4_2, false);
+              var clickableDot_4_4 = new ClickableDot("Black", DOT_RADIUS, clickableDot_4_2, true);
+              var clickableDot_4_5 = new ClickableDot("Orange", DOT_RADIUS, clickableDot_4_3, false);
+              
+              level4_starting_dots = [clickableDot_4_1, clickableDot_4_2, clickableDot_4_3, clickableDot_4_4, clickableDot_4_5];
+              
+              level4 = new Level(0, 1, 0, 0, 0, level4_solution, level4_starting_dots, 4, "Learn To Reset");
+              all_levels.push(level4);
+              // current_level = level4;
+              // current_dots = level4_starting_dots;
+              ///////////////////////////////////////// END LEVEL 4 DEFINITION
+              
+              ////////////////////////////////////////// LEVEL 5 DEFINITION
+              var dot_5_1 = new Dot("Navy", DOT_RADIUS, 0, 0, null);
+              var dot_5_2 = new Dot("Green",  DOT_RADIUS, 1, 0, dot_5_1);
+              var dot_5_3 = new Dot("Red", DOT_RADIUS, 2, 0, dot_5_2);
+              var dot_5_4 = new Dot("Orange", DOT_RADIUS, 3, 0, dot_5_3);
+              var dot_5_5 = new Dot("Purple", DOT_RADIUS, 4, 0, dot_5_4);
+
+              level5_solution = [dot_5_1, dot_5_2, dot_5_3, dot_5_4, dot_5_5];
+              
+              var clickableDot_5_1 = new ClickableDot("Navy", DOT_RADIUS, null, true);
+              var clickableDot_5_2 = new ClickableDot("Green", DOT_RADIUS, clickableDot_5_1, true);
+              var clickableDot_5_3 = new ClickableDot("Red", DOT_RADIUS, clickableDot_5_1, false);
+              var clickableDot_5_4 = new ClickableDot("Orange", DOT_RADIUS, clickableDot_5_2, false);
+              var clickableDot_5_5 = new ClickableDot("Purple", DOT_RADIUS, clickableDot_5_4, false);
+              
+              level5_starting_dots = [clickableDot_5_1, clickableDot_5_2, clickableDot_5_3, clickableDot_5_4, clickableDot_5_5];
+              
+              level5 = new Level(1, 0, 0, 0, 1, level5_solution, level5_starting_dots, 5, "Use 2 Moves");
+              all_levels.push(level5);
+              // current_level = level5;
+              // current_dots = level5_starting_dots;
+              ///////////////////////////////////////// END LEVEL 5 DEFINITION
+              
+              ////////////////////////////////////////// LEVEL 6 DEFINITION
+              var dot_6_1 = new Dot("Navy", DOT_RADIUS, 0, 0, null);
+              var dot_6_2 = new Dot("Red",  DOT_RADIUS, 1, 0, dot_6_1);
+              var dot_6_3 = new Dot("Purple", DOT_RADIUS, 2, 0, dot_6_2);
+
+              level6_solution = [dot_6_1, dot_6_2, dot_6_3];
+              
+              var clickableDot_6_1 = new ClickableDot("Navy", DOT_RADIUS, null, true);
+              var clickableDot_6_2 = new ClickableDot("Green", DOT_RADIUS, clickableDot_6_1, true);
+              var clickableDot_6_3 = new ClickableDot("Red", DOT_RADIUS, clickableDot_6_2, true);
+              var clickableDot_6_4 = new ClickableDot("Orange", DOT_RADIUS, clickableDot_6_2, false);
+              var clickableDot_6_5 = new ClickableDot("Purple", DOT_RADIUS, clickableDot_6_4, false);
+              
+              level6_starting_dots = [clickableDot_6_1, clickableDot_6_2, clickableDot_6_3, clickableDot_6_4, clickableDot_6_5];
+              
+              level6 = new Level(1, 0, 0, 2, 0, level6_solution, level6_starting_dots, 6, "Order Matters");
+              all_levels.push(level6);
+              // current_level = level6;
+              // current_dots = level6_starting_dots;
+              ///////////////////////////////////////// END LEVEL 6 DEFINITION
+              
+              ////////////////////////////////////////// LEVEL 7 DEFINITION
+              // Level(rebases, resets, copies, removes, cherry_picks, solution_dots, starting_position_dots, level_number, level_name)
+              var dot_7_1 = new Dot("Navy", DOT_RADIUS, 0, 0, null);
+              var dot_7_2 = new Dot("Gray", DOT_RADIUS, 1, 0, dot_7_1);
+              var dot_7_3 = new Dot("Orange", DOT_RADIUS, 2, 0, dot_7_2);
+              var dot_7_4 = new Dot("Purple", DOT_RADIUS, 3, 0, dot_7_3);
+              var dot_7_5 = new Dot("Pink", DOT_RADIUS, 4, 0, dot_7_4);
+              var dot_7_6 = new Dot("Green", DOT_RADIUS, 5, 0, dot_7_5);
+              var dot_7_7 = new Dot("Black", DOT_RADIUS, 6, 0, dot_7_6);
+
+              level7_solution = [dot_7_1, dot_7_2, dot_7_3, dot_7_4, dot_7_5, dot_7_6, dot_7_7];
+              
+              var clickableDot_7_1 = new ClickableDot("Navy", DOT_RADIUS, null, true);
+              var clickableDot_7_2 = new ClickableDot("Purple", DOT_RADIUS, clickableDot_7_1, true);
+              var clickableDot_7_3 = new ClickableDot("Black", DOT_RADIUS, clickableDot_7_1, false);
+              var clickableDot_7_4 = new ClickableDot("Gray", DOT_RADIUS, clickableDot_7_1, false);
+              var clickableDot_7_5 = new ClickableDot("Green", DOT_RADIUS, clickableDot_7_3, false);
+              var clickableDot_7_6 = new ClickableDot("Red", DOT_RADIUS, clickableDot_7_4, false);
+              var clickableDot_7_7 = new ClickableDot("Pink", DOT_RADIUS, clickableDot_7_6, false);
+              var clickableDot_7_8 = new ClickableDot("Orange", DOT_RADIUS, clickableDot_7_6, false);
+              
+              level7_starting_dots = [clickableDot_7_1, clickableDot_7_2, clickableDot_7_3, clickableDot_7_4, clickableDot_7_5, clickableDot_7_6, clickableDot_7_7, clickableDot_7_8];
+              
+              level7 = new Level(3, 1, 0, 1, 1, level7_solution, level7_starting_dots, 7, "A Hard One. Can you do it?");
+              all_levels.push(level7);
+              // current_level = level7;
+              // current_dots = level7_starting_dots;
+              ///////////////////////////////////////// END LEVEL 7 DEFINITION
+
+              ////////////////////////////////////////// LEVEL 8 DEFINITION
+              dot_8_0 = new Dot('Steelblue', DOT_RADIUS, 0, 0, null);
+              dot_8_1 = new Dot('Pink', DOT_RADIUS, 1, 0, dot_8_0);
+              dot_8_2 = new Dot('Purple', DOT_RADIUS, 2, 0, dot_8_1);
+              dot_8_3 = new Dot('Black', DOT_RADIUS, 3, 0, dot_8_2);
+
+
+              clickable_dot_8_0 = new ClickableDot('Steelblue', DOT_RADIUS, null, true);
+              clickable_dot_8_1 = new ClickableDot('Pink', DOT_RADIUS, clickable_dot_8_0, false);
+              clickable_dot_8_2 = new ClickableDot('Purple', DOT_RADIUS, clickable_dot_8_1, false);
+              clickable_dot_8_3 = new ClickableDot('Green', DOT_RADIUS, clickable_dot_8_0, true);
+              clickable_dot_8_4 = new ClickableDot('Black', DOT_RADIUS, clickable_dot_8_3, false);
+
+
+              level8_solution = [dot_8_0, dot_8_1, dot_8_2, dot_8_3];
+
+              level8_starting_dots = [clickable_dot_8_0, clickable_dot_8_1, clickable_dot_8_2, clickable_dot_8_3, clickable_dot_8_4];
+
+              level8 = new Level(1, 1, 0, 0, 0, level8_solution, level8_starting_dots, 8, 'The Level Maker Lives!!!');
+
+              all_levels.push(level8);
+              ////////////////////////////////////////// END LEVEL 8 DEFINITION
+              
+              dot_9_0 = new Dot('Black', DOT_RADIUS, 0, 0, null);
+              dot_9_1 = new Dot('Blue', DOT_RADIUS, 1, 0, dot_9_0);
+              dot_9_2 = new Dot('Green', DOT_RADIUS, 2, 0, dot_9_1);
+              dot_9_3 = new Dot('Red', DOT_RADIUS, 3, 0, dot_9_2);
+
+
+              clickable_dot_9_0 = new ClickableDot('Black', DOT_RADIUS, null, true);
+              clickable_dot_9_1 = new ClickableDot('Red', DOT_RADIUS, clickable_dot_9_0, true);
+              clickable_dot_9_2 = new ClickableDot('Green', DOT_RADIUS, clickable_dot_9_1, true);
+              clickable_dot_9_3 = new ClickableDot('Blue', DOT_RADIUS, clickable_dot_9_2, true);
+
+
+              level9_solution = [dot_9_0, dot_9_1, dot_9_2, dot_9_3];
+
+              level9_starting_dots = [clickable_dot_9_0, clickable_dot_9_1, clickable_dot_9_2, clickable_dot_9_3];
+
+              level9 = new Level(3, 1, 0, 0, 0, level9_solution, level9_starting_dots, 9, 'RGB fun');
+
+              all_levels.push(level9);
+              ///////////////////////////////////////////////////////////////////
+              
+              dot_10_0 = new Dot('Red', DOT_RADIUS, 0, 0, null);
+
+              clickable_dot_10_0 = new ClickableDot('Mediumpurple', DOT_RADIUS, null, true);
+              clickable_dot_10_1 = new ClickableDot('Olive', DOT_RADIUS, clickable_dot_10_0, true);
+              clickable_dot_10_2 = new ClickableDot('Red', DOT_RADIUS, clickable_dot_10_1, true);
+              clickable_dot_10_3 = new ClickableDot('Black', DOT_RADIUS, clickable_dot_10_2, true);
+              clickable_dot_10_4 = new ClickableDot('Chocolate', DOT_RADIUS, clickable_dot_10_3, true);
+
+
+              level10_solution = [dot_10_0];
+
+              level10_starting_dots = [clickable_dot_10_0, clickable_dot_10_1, clickable_dot_10_2, clickable_dot_10_3, clickable_dot_10_4];
+
+              level10 = new Level(1, 1, 0, 1, 0, level10_solution, level10_starting_dots, 10, 'Man In The Middle');
+
+              all_levels.push(level10);
+              
+              ////////////////////////////////////////// LEVEL MAKER DEFINITION
+              // Level(rebases, resets, copies, removes, cherry_picks, solution_dots, starting_position_dots, level_number, level_name)
+              
+              var paletteDot_navy          = new PaletteDot("Navy", DOT_RADIUS);
+              var paletteDot_purple        = new PaletteDot("Purple", DOT_RADIUS);
+              var paletteDot_black         = new PaletteDot("Black", DOT_RADIUS);
+              var paletteDot_gray          = new PaletteDot("Gray", DOT_RADIUS);
+              var paletteDot_green         = new PaletteDot("Green", DOT_RADIUS);
+              var paletteDot_red           = new PaletteDot("Red", DOT_RADIUS);
+              var paletteDot_pink          = new PaletteDot("Pink", DOT_RADIUS);
+              var paletteDot_orange        = new PaletteDot("Orange", DOT_RADIUS);
+              var paletteDot_aqua          = new PaletteDot("Aqua", DOT_RADIUS);
+              var paletteDot_olive         = new PaletteDot("Olive", DOT_RADIUS);
+              var paletteDot_maroon        = new PaletteDot("Maroon", DOT_RADIUS);
+              var paletteDot_blue          = new PaletteDot("Blue", DOT_RADIUS);
+              var paletteDot_teal          = new PaletteDot("Teal", DOT_RADIUS);
+              var paletteDot_chocolate     = new PaletteDot("Chocolate", DOT_RADIUS);
+              var paletteDot_yellowgreen   = new PaletteDot("Yellowgreen", DOT_RADIUS);
+              var paletteDot_sienna        = new PaletteDot("Sienna", DOT_RADIUS);
+              var paletteDot_steelblue     = new PaletteDot("Steelblue", DOT_RADIUS);
+              var paletteDot_mediumpurple  = new PaletteDot("Mediumpurple", DOT_RADIUS);
+              var paletteDot_midnightblue  = new PaletteDot("Midnightblue", DOT_RADIUS);
+              var paletteDot_burlywood     = new PaletteDot("Burlywood", DOT_RADIUS);
+              var paletteDot_crimson       = new PaletteDot("Crimson", DOT_RADIUS);
+              var paletteDot_deeppink      = new PaletteDot("Deeppink", DOT_RADIUS);
+              
+              color_palette_dots = [paletteDot_navy, paletteDot_purple, paletteDot_black, paletteDot_gray, paletteDot_green, paletteDot_red, paletteDot_pink, paletteDot_orange, paletteDot_aqua, paletteDot_olive, paletteDot_maroon, paletteDot_blue, paletteDot_teal, paletteDot_chocolate, paletteDot_yellowgreen, paletteDot_sienna, paletteDot_steelblue, paletteDot_mediumpurple, paletteDot_midnightblue, paletteDot_burlywood, paletteDot_crimson, paletteDot_deeppink];
+              
+              
+              ///////////////////////////////////////// END LEVEL MAKER DEFINITION
+              
+              current_level.begin();
+              
+              
+              function calculate_num_children_for_all_dots() {
+                var i = 0;
+                while(i < current_dots.length) {
+                    // alert("i: " + i + ", current_dots.length: " + current_dots.length);
+                    
+                    console.log("Calculating num children for " + current_dots[i].fillStyle);
+                    current_dots[i].num_children = current_dots[i].calculate_num_children();
+                  i++;
+                }
+                
+                return true;
+              }
+              
+              function clear_clickable_dots() {
+                if(level_maker_on == true) {
+                  ctx.clearRect(110, 270, 370, 800);
+                }
+                else {
+                  ctx.clearRect(110, 0, 370, 800);
+                }  
+              }
+              
+              function clear_whole_canvas() {
+                ctx.clearRect(0, 0, 480, 800);
+              }
+              
+              function get_root_dot() {
+                for(g = 0; g < current_dots.length; g++) {
+                  if(current_dots[g].parent_dot === null) {
+                    return current_dots[g];
+                  }
+                }
+              }
+              
+ 
+              function recursively_place_dots() {
+                // Clear all clickable dots 
+                clear_clickable_dots();
+                
+                // Place all the dots
+                var root_dot = get_root_dot();
+                console.log("Root dot is: " + JSON.stringify(root_dot));
+                
+                root_dot.draw();
+                placed_dots.push(root_dot);
+                
+                root_dot.recursively_place_children();
+                
+                reset_all_temp_drawing_properties();
+              }
+
+              function reset_all_temp_drawing_properties() {
+                for(i=0; i < current_dots.length; i++) {
+                  var dot = current_dots[i];
+                  
+                  dot.children_placed = 0;
+                  dot.children_placed_not_on_master = 0;
+                  dot.placed = false;
+                }
+                placed_dots = [];
+              }
+
+              function openMoveOptions() {
+                generateMoveOptions();
+                
+                // if(currently_clicked != null) {
+                //   $("#dot_clicked_color").text(currently_clicked.fillStyle);
+                // }
+                
+                $("#move_modal").show();
+              }
+              
+              function generateMoveOptions() {
+                if ((current_level.rebases - current_level.rebase_used) > 0) {
+                  $("button#rebase span.num_available").text((current_level.rebases - current_level.rebase_used));
+                  $("button#rebase").show();
+                }
+                else {
+                  $("button#rebase").hide();
+                }
+                
+                if ((current_level.copies - current_level.copy_used) > 0) {
+                  $("button#copy span.num_available").text((current_level.copies - current_level.copy_used));
+                  $("button#copy").show();
+                }
+                else {
+                  $("button#copy").hide();
+                }
+                
+                if ((current_level.removes - current_level.remove_used) > 0) {
+                  $("button#remove span.num_available").text((current_level.removes - current_level.remove_used));
+                  $("button#remove").show();
+                }
+                else {
+                  $("button#remove").hide();
+                }
+                
+                if ((current_level.resets - current_level.reset_used) > 0) {
+                  $("button#reset span.num_available").text((current_level.resets - current_level.reset_used));
+                  $("button#reset").show();
+                }
+                else {
+                  $("button#reset").hide();
+                }
+                
+                if ((current_level.cherry_picks - current_level.cherry_pick_used) > 0) {
+                  $("button#cherry_pick span.num_available").text((current_level.cherry_picks - current_level.cherry_pick_used));
+                  $("button#cherry_pick").show();
+                }
+                else {
+                  $("button#cherry_pick").hide();
+                }
+              }
+              
+              function move_not_currently_in_progress() {
+                if(move_in_progress == null) {
+                  return true;
+                }
+                else {
+                  return false;
+                }
+              }
+              
+              // Move was clicked
+              $("button.move").live('click', function (e) {
+                // $("#move_modal").hide();
+
+                if(move_not_currently_in_progress() == true) {
+                  move_in_progress = $(this).attr("id");
+                  $(".instructions#" + move_in_progress).show();
+                }
+                else {
+                  $(".instructions#" + move_in_progress).hide();
+                  $(".first_instructions").show();
+                  $(".instructions#" + move_in_progress + " .secondary_instructions").hide();
+                  $(".instructions#" + move_in_progress + " .tertiary_instructions").hide();
+                  
+                  move_in_progress = null;
+                  currently_clicked = null;
+                  secondary_clicked = null;
+                  tertiary_clicked = null;
+                  
+                  move_in_progress = $(this).attr("id");
+                  $(".instructions#" + move_in_progress).show();
+                }
+
+                e.stopPropagation();
+              });
+              
+              function checkForWin() {
+                generateCurrentBranches();
+                var win = true;
+                
+                console.log("Solution colors is: " + JSON.stringify(current_level.solution_colors()) + "and current master branch is: " + JSON.stringify(current_master_branch));
+                
+                if (current_level.solution_colors().length == current_master_branch.length) {
+                  var solution_dot_color = null;
+                  var clickable_dot_color = null;
+                  
+                  for(count = 0; count < current_level.solution_colors().length; count++) {
+                    solution_dot_color = current_level.solution_colors()[count];
+                    clickable_dot_color = current_master_branch[count];
+                    
+                    console.log("Solution dot color at " + count + " is " + solution_dot_color + " and master branch dot color at this position is: " + clickable_dot_color);
+                     
+                    if(solution_dot_color === clickable_dot_color) {
+                      i++;
+                    } else {
+                      console.log("i am returning false because: " + solution_dot_color + " != " + clickable_dot_color);
+                      win = false;
+                      break;
+                    }
+                  }
+                  
+                }
+                else {
+                  win = false;
+                }
+                
+                return win;
+              }
+              
+              function generateCurrentBranches() {
+                current_master_branch = [];
+                // 
+                // for(i=0; i < current_dots.length; i++) {
+                //   var dot = current_dots[i]
+                //   
+                //   // If in master branch
+                //   if(dot.x_column_position == 0){
+                //     current_master_branch[dot.y_row_position] = dot.fillStyle;
+                //   }
+                // }
+                var i = 0;
+                while(i < current_dots.length) {
+                  var dot = current_dots[i];
+                  if(dot.x_column_position == 0){
+                    dot.on_master_branch = true;
+                    console.log("Adding " + dot.fillStyle + " dot to the current master branch in position " + dot.y_row_position);
+                    
+                    current_master_branch[dot.y_row_position] = dot.fillStyle;
+                  }
+                  else {
+                    dot.on_master_branch = false;
+                  }
+                  i++;
+                }
+                
+                console.log("Current master branch is " + JSON.stringify(current_master_branch));
+              }
+              
+              function top_of_column(col_num){
+                var current_top_of_column_row = -1;
+                var current_top_of_column_dot = null;
+                
+                for(i=0; i < current_dots.length; i++) {
+                  var dot = current_dots[i]
+                  
+                  // If in master branch
+                  if(dot.x_column_position == col_num  && dot.y_row_position > current_top_of_column_row){
+                    current_top_of_column_row = dot.y_row_position;
+                    current_top_of_column_dot = dot;
+                  }
+                }
+                
+                return current_top_of_column_dot;
+              }
+              
+              function all_tops_of_columns() {
+                var tops_of_columns = [];
+                
+                for(c=0; c < current_dots.length; c++) {
+                  console.log("Top of column c: " + c);
+                  if(current_dots[c].num_children == 0) {
+                    tops_of_columns.push(current_dots[c]);
+                  }
+                }
+                
+                return tops_of_columns;
+              }
+              
+              function options_for_master_branch_on_rebase() {
+                var tops_of_columns = all_tops_of_columns();
+                var options = [];
+                
+                for(d=0; d < tops_of_columns.length; d++) {
+                  var original_dot = tops_of_columns[d];
+                  var dot = tops_of_columns[d];
+                  
+                  while(dot.parent_dot != null) {
+                    
+                    if(dot.parent_dot == currently_clicked) {
+                      options.push(original_dot);
+                    }
+                    
+                    dot = dot.parent_dot;
+                  }
+                }
+                
+                return options;
+              }
+              
+              function clear_master_branch() {
+                for(d=0; d < current_dots.length; d++) {
+                  var dot = current_dots[d];
+                  
+                  if(dot != get_root_dot()) {
+                    current_dots[d].on_master_branch = false;
+                  }
+                }
+              }
+              
+              ////////////////////////////////// MOVES
+              function cherry_pick() {
+                console.log("Cherry picking " + currently_clicked.fillStyle + " dot.");
+                generateCurrentBranches();
+                
+                // Create copy of dot on top of master branch and add it to current_dots
+                eval("clickable_dot_" + current_level.starting_position_dots.length + " = new ClickableDot('" + currently_clicked.fillStyle + "', DOT_RADIUS, top_of_column(0), true)");
+                eval("current_dots.push(clickable_dot_" + current_level.starting_position_dots.length + ");");
+              }
+              
+              function copy() {
+                
+              }
+              
+              function rebase() {
+                console.log("Rebasing " + currently_clicked.fillStyle + " dot and branch on  " + secondary_clicked.fillStyle);
+                generateCurrentBranches();
+                
+                currently_clicked.parent_dot = secondary_clicked;
+                
+                // Moving away from master branch
+                if(currently_clicked.on_master_branch == true && secondary_clicked.on_master_branch == false) {
+                  currently_clicked.remove_self_and_child_from_master_branch();
+                }
+                
+                // Moving on to master branch
+                if(tertiary_clicked != null) {
+                  tertiary_clicked.set_self_and_all_parents_to_master_branch();
+                }
+                else {
+                  if(top_of_column(0) == secondary_clicked) {
+                    currently_clicked.add_self_and_child_to_master_branch(true);
+                  }
+                  else {
+                    currently_clicked.add_self_and_child_to_master_branch(false);
+                  }
+                }
+              }
+              
+              function remove() {
+                console.log("Removing " + currently_clicked.fillStyle + " dot.");
+                generateCurrentBranches();
+                
+                currently_clicked.remove_children();
+                console.log("Splicing " + currently_clicked.fillStyle + " out of current dots");
+                
+                currently_clicked.remove_self();
+                
+                // console.log("Current dots is now equal to: " + JSON.stringify(current_dots));
+              }
+        
+              function reset() {
+                console.log("Resetting " + currently_clicked.fillStyle + " dot.");
+                
+                clear_master_branch();
+                currently_clicked.set_self_and_all_parents_to_master_branch();
+              }
+              
+              function make_move() {
+                console.log("Making move: " + move_in_progress);
+                
+                $(".instructions#" + move_in_progress).hide();
+                $(".first_instructions").show();
+                $(".instructions#" + move_in_progress + " .secondary_instructions").hide();
+                $(".instructions#" + move_in_progress + " .tertiary_instructions").hide();
+                
+                eval(move_in_progress + "()");
+                current_level[move_in_progress + "_used"] += 1;
+                
+                // Redraw dots
+                // place_all_dots();
+                recursively_place_dots()
+                
+                
+                move_in_progress = null;
+                currently_clicked = null;
+                secondary_clicked = null;
+                tertiary_clicked = null;
+                
+                if(checkForWin() == true) {
+                  console.log("YOU WON!"); 
+                  alert("YOU WON! YOU ARE AWESOME!");
+                  ctx.save();
+                  ctx.fillStyle = "Black";
+                  ctx.translate(135, 790);
+                  ctx.font = "24px sans-serif";
+                  ctx.textAlign = "center";
+                  ctx.fillText("YOU WON!!!!!", 130, 0);
+                  ctx.restore();
+                }
+                else {
+                  if(no_more_moves_available() == true) {
+                    alert("Sorry! You lost. Try again.")
+                    current_level.begin();
+                  }
+                  else {
+                    console.log("You did not win yet. Keep going!");
+                    // alert("You did not win yet. Keep going!");
+                    
+                    openMoveOptions();
+                  }
+                }
+              }
+              
+              function no_more_moves_available() {
+                var moves_available = 0;
+                
+
+                moves_available += (current_level.rebases - current_level.rebase_used);
+                moves_available += (current_level.copies - current_level.copy_used);
+                moves_available += (current_level.removes - current_level.remove_used);
+                moves_available += (current_level.resets - current_level.reset_used);
+                moves_available += (current_level.cherry_picks - current_level.cherry_pick_used);
+                
+                if(moves_available > 0) {
+                  return false;
+                }
+                else {
+                  return true;
+                }
+              }
+              
+              //////////////////////////////// END MOVES
+              
+              // canvas click listener
+              canvas.addEventListener('click', function(e) {
+                  console.log('click at (' + e.offsetX + ',' + e.offsetY + ')');
+                  checkCollisionWithClickableDots(e);
+                  checkCollisionWithPaletteDots(e);
+              }, false);
+                        
+              $("button.begin_level").live('click', function (e) {
+                var level = eval($(this).attr("id"));
+                level.begin();
+                
+                e.stopPropagation();
+              });
+              
+              $("button#open_level_maker").live('click', function (e) {
+                initialize_level_maker();
+              });
+              
+              function create_menu() {
+                add_level_buttons();
+              }
+              create_menu();
+              
+              function add_level_buttons() {
+                for(ct=0; ct < all_levels.length; ct++) {
+                  var level = all_levels[ct];
+                  $("#level_buttons").append("<button class='begin_level' id='level" + level.level_number + "'>Play Level " + level.level_number + ": " + level.level_name + "</button><br />");
+                }
+              }
+              
+              function add_palette_dots() {
+                clear_palette_box();
+                for(var d=0; d < color_palette_dots.length; d++) {
+                  
+                  if(d < 11){
+                    color_palette_dots[d].positionX = ((d * 35) + 40);
+                    color_palette_dots[d].positionY = 200;
+                  }
+                  else {
+                    color_palette_dots[d].positionX = (((d - 10) * 35) + 40);
+                    color_palette_dots[d].positionY = 250;
+                  }
+                  
+                  color_palette_dots[d].draw();
+                }
+              }
+              
+              function initialize_level_maker() {
+                current_level = null;
+                current_dots = null;
+                level_maker_on = true;
+                
+                $("#level_description").html("<h2>Level Maker</h2>");
+                clear_whole_canvas();
+                $("#move_modal").hide();
+                $("#level_maker_instructions").show();
+                
+                add_palette_dots();
+              }
+              
+              function clear_palette_box() {
+                ctx.clearRect(0, 70, 480, 100);
+              }
+              
+              function finished_adding_dots_to_level(){
+                alert("Now add some moves to your level and create the solution line!");
+                new_level_starting_dots = current_dots;
+                // all_levels.push(new_level);
+                new_level = new Level(100, 100, 0, 100, 100, [], new_level_starting_dots, all_levels.length + 1 , "Solve Your New Level");
+                level_maker_on = false;
+                new_level.begin();
+                $("#done_adding_dots").hide();
+                $(".level_maker_instruction").hide();
+                $("#solving_level").show();
+                $("#done_solving_level_maker").show();
+                
+                current_level.rand_level_id = Math.round(Math.random(100)*100000);
+                generate_json_dots(new_level_starting_dots, false, current_level.rand_level_id);
+              }
+              
+              $("#done_adding_dots").live("click", function(){
+                finished_adding_dots_to_level();
+              });
+              
+              function finished_solving_level_maker() {
+                // Level(rebases, resets, copies, removes, cherry_picks, solution_dots, starting_position_dots, level_number, level_name)
+                // finished_new_level = new Level(current_level.rebase_used, current_level.reset_used, current_level.copy_used, current_level.remove_used, current_level.cherry_pick_used, current_dots, current_level.starting_position_dots, all_levels.length, $("input#level_name").val());
+                
+                
+                // var the_solution_dots = []
+                // var json = [[current_level.rebase_used, current_level.reset_used, current_level.copy_used, current_level.remove_used, current_level.cherry_pick_used], current_dots, current_level.starting_position_dots]
+                // serializedXML = serializer.serialize(finished_new_level, 'Level');
+                $("body").prepend("<label>YOUR NEW LEVEL!</label><br /><textarea id='new_level_xml'></textarea>");
+                // $("textarea#new_level_xml").val(JSON.stringify(finished_new_level));
+                $("textarea#new_level_xml").val(generate_json_level());
+                
+                
+                alert("Copy and paste your new level output from the text area into an email and send it to The Creator for consideration. Thank you.");
+                $("input#level_name").val("");
+                $("#level_maker_instructions").hide();
+              }
+              
+              function generate_json_level() {
+                var output_string;
+                
+                var rand_level_id = Math.round(Math.random(100)*100000);
+                var rand_level_id = current_level.rand_level_id;
+
+                generate_json_dots(current_dots, true, rand_level_id);
+                
+                var moves_used_string = current_level.rebase_used +", "+ current_level.reset_used +", "+ current_level.copy_used +", "+ current_level.remove_used +", "+ current_level.cherry_pick_used;
+                
+                // Chop off trailing comma and space
+                new_level_starting_positions_string_array = new_level_starting_positions_string_array.substring(0, new_level_starting_positions_string_array.length - 2);
+                new_level_solution_dots_string_array = new_level_solution_dots_string_array.substring(0, new_level_solution_dots_string_array.length - 2);
+                
+                var solutions_dots_array_string = "[" + new_level_solution_dots_string_array + "]";
+                var starting_positions_array_string = "[" + new_level_starting_positions_string_array + "]";
+                
+                var define_solution_dots_array = "level" + rand_level_id + "_solution = " + solutions_dots_array_string + ";";
+                var define_starting_dots_array = "level" + rand_level_id + "_starting_dots = " + starting_positions_array_string + ";";
+                
+                var new_level_defining_string = "level" + rand_level_id + " = new Level(" + moves_used_string + ", level" + rand_level_id + "_solution, level"+ rand_level_id + "_starting_dots, " + rand_level_id + ", '" + $("input#level_name").val() + "');";
+                
+                var add_level_to_rest_of_levels = "all_levels.push(level" + rand_level_id + ");";
+                
+                output_string = new_level_solution_dots_string + "\n\n" + new_level_starting_positions_string + "\n\n" + define_solution_dots_array + "\n\n" + define_starting_dots_array + "\n\n" + new_level_defining_string + "\n\n" + add_level_to_rest_of_levels;
+                
+                // Reset all strings
+                new_level_starting_positions_string = "";
+                new_level_solution_dots_string = "";
+                new_level_starting_positions_string_array = "";
+                new_level_solution_dots_string_array = "";
+                
+                return output_string;
+              }
+              
+              function generate_json_dots(dots, is_solution_dots, rand_level_id) {
+                // var clickableDot_7_1 = new ClickableDot("Navy", DOT_RADIUS, null, true);
+                var root_dot
+                for(z = 0; z < dots.length; z++) {
+                  if(dots[z].parent_dot === null) {
+                    root_dot = dots[z];
+                  }
+                }
+                
+                
+                if(is_solution_dots == true) {
+                  root_dot.new_level_name = "dot_" + rand_level_id + "_0";
+                  // var dot_7_2 = new Dot("Gray", DOT_RADIUS, 1, 0, dot_7_1);
+                  new_level_solution_dots_string = new_level_solution_dots_string + root_dot.new_level_name + " = new Dot('" + root_dot.fillStyle + "', DOT_RADIUS, 0, 0, null);\n";
+                  new_level_solution_dots_string_array = root_dot.new_level_name + ", ";
+                  new_level_num_placed = 1;
+                  
+                  root_dot.generate_solution_string_of_children(rand_level_id);
+                }
+                else {
+                  root_dot.new_level_name = "clickable_dot_" + rand_level_id + "_0";
+                  new_level_starting_positions_string = new_level_starting_positions_string + root_dot.new_level_name + " = new ClickableDot('" + root_dot.fillStyle + "', DOT_RADIUS, null, true);\n";
+                  new_level_starting_positions_string_array = root_dot.new_level_name + ", ";
+                  new_level_num_placed = 1;
+                  
+                  root_dot.generate_string_of_children(rand_level_id);
+                }
+                
+                // array_for_json = []
+                // for(a = 0; a < dots.length; a++) {
+                //   array_for_json.push([dots[a].fillStyle, dots[a].on_master_branch, dots[a].parent_dot.fillStyle]);
+                // }
+                new_level_num_placed = 0;
+              }
+                           
+              $("#done_solving_level_maker").live("click", function(){
+                $("#dialog-form").dialog({
+                  autoOpen: true,
+                  height: 300,
+                  width: 350,
+                  modal: true,
+                  buttons: {
+                    "Create New Level": function() {
+                        $(this).dialog("close");
+                        finished_solving_level_maker();
+                    }
+                  }
+                });
+                // $("#dialog-form").show();
+              });
+          };
+          
+      </script>
+  </head>
+  <body>
+      <div id="container">
+        <div id="level_description">
+        </div>
+        
+        <div id="dialog-form" title="Create new level">
+          <form>
+            <fieldset>
+              <label for="name">Level Name</label>
+              <input type="text" name="name" id="level_name" class="text ui-widget-content ui-corner-all" />
+            </fieldset>
+          </form>
+        </div>
+        
+        <div id="level_maker_instructions">
+          <div class="level_maker_instruction" id="choose_root_dot">
+            The first dot you click will be made the root dot.
+          </div>
+          <div class="level_maker_instruction" id="choose_parent">
+            Click which dot you would like the currently selected dot to be connected to.
+          </div>
+          <div class="level_maker_instruction" id="choose_color">
+            Click which color dot you would like to add next.
+          </div>
+          <div class="level_maker_instruction" id="solving_level">
+            Use whatever moves you'd like to get the solution line the way you want. Then click the button below.
+          </div>
+          <button id="done_adding_dots">Click When Finished Adding Dots</button>
+          <button id="done_solving_level_maker">Done Solving New Level</button>
+        </div>
+        
+        <div id="move_modal">
+          <h3>Moves available:</h3>
+          <button class="move" id="rebase">Rebase (<span class="num_available">0</span> Remaining)</button>
+          <div class="instructions" id="rebase">
+            <div class="first_instructions">
+              Rebasing moves all dots that are above the first dot you clicked on top of the second dot you clicked.
+              <br /><br />
+              If you choose the top dot of your solution line it will join the solution line.
+            </div>
+          
+            <div class="secondary_instructions">
+              Choose which dot you want to rebase on top of!
+            </div>
+          
+            <div class="tertiary_instructions">
+              Choose which dot you want be in your solution line!
+            </div>
+          </div>
+        
+        
+          <button class="move" id="copy">Copy (<span class="num_available">0</span> Remaining)</button>
+          <div class="instructions" id="copy">
+            This makes a temporary copy of all the dots below the dot you selected. You will have access to these dots for 2 moves and then the copy will disappear. 
+          </div>
+        
+          <button class="move" id="remove">Remove (<span class="num_available">0</span> Remaining)</button>
+          <div class="instructions" id="remove">
+            This will remove whatever dot you clicked. All the dots in the solution branch on top of it will fall down a level. All dots attached to it not in the solution branch will be removed as well. 
+          </div>
+        
+          <button class="move" id="reset">Reset (<span class="num_available">0</span> Remaining)</button>
+          <div class="instructions" id="reset">
+            Choose a dot you want to reset your solution line to. The dot you click and all dots connected to it below that dot will be put in to the solution line.
+          
+            <!-- <div class="secondary_instructions">
+              Choose which line you want to reset!
+            </div> -->
+          </div>
+        
+          <button class="move" id="cherry_pick">Cherry-Pick (<span class="num_available">0</span> Remaining)</button>
+          <div class="instructions" id="cherry_pick">
+            Whatever dot you choose will be copied and added to the top of your solution line.
+          </div>
+        </div>
+      </div>
+      
+      <canvas id="canvas" width="480" height="800"></canvas>
+      <div id="right_column_container">
+        <div id="game_instructions">
+          <h3>Instructions</h3>
+          The goal of the game is simple. You need to make it so the dots on your yellow solution line match the dots on the yellow goal line. 
+          Use the moves available to you to rearrange the dots and follow the instructions as they show up for each type of move. 
+          <br />
+          <br />
+          First click the move you want to do. Then follow the instructions and choose which dots you want to click.
+          <br />
+          <br />
+          The dots on the right side are the clickable ones. 
+        </div>
+
+        <div id="menu">
+          <h3>Menu</h3>
+        
+          <button id="open_level_maker">Open The Level Maker</button><br />
+          <br />
+          <div id="level_buttons"></div>
+        
+        </div>
+      </div>
+  </body>
+</html>
