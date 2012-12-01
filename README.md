@@ -1,64 +1,12 @@
-Here at GitHub, we're no strangers to hosting or sponsoring hackathons. With the growing number of games and game development resources on GitHub, we thought it was about time to throw our very own game jam!
+This is a prototype for a mobile game that I created called Rebase. You can [play the online prototype here](http://danfischer87.github.com/game-off-2012/index.html). The final mobile version is currently available in the android app store for free here:  [Rebase for Android](https://play.google.com/store/apps/details?id=com.fischfro.rebase). It will be available for iOS very soon.
 
-## The Challenge
+Rebase is a challenging puzzle game that tests your spatial awareness skills and ability to strategize and think ahead. Use four types of moves (rebase, reset, remove, and cherry-pick) to untangle these messy dots into a straight line. The goal of the game is simple; get your messy dots on the right to have the same yellow line as the straight line on the left, your goal line.
 
-You have the entire month of November to create a **web-based** game *loosely* built around one or more of the following themes:
+I was always getting asked by my coworkers to help them with their merges and I realized that no one else saw Git the way I did. I'm a visual person and always saw my commits as it is displayed in gitx but my coworkers weren't visualizing the commands they were using and their effects on their commit trees same way I did. If I asked them "You're doing a rebase of this branch on to this. What will your commit tree look like?" I'm not sure many of them could have drawn it out. This is what inspired me to make the game Rebase. I wanted everyone to be able to untangle their git commits visually and see using git as fun puzzle rather than a necessary nuisance. The moves in this game are the actual git commands (except for "remove"), my favorite being rebase. Sometimes it can get pretty crazy untangling that mess, and using rebase helps to keep things organized and in a straight line. In addition to helping my developers visualize git commands I wanted everyone, developers, and non-developers alike, to be able to have fun untangling branches of dots. That’s all Rebase and git really are, fun and challenging puzzles. To do this I simplified the git commands in my game a little. You're not really on a branch but you have some effects of being on the yellow line branch. I also had to make some compromises as to how the rebase would work when you cannot be on any other branch. I also added remove, which is possible in git but doesn't have a specific command that I know of.
 
-* forking (or forks)
-* branching (or branches)
-* cloning (or clones)
-* pushing
-* pulling
 
-What do we mean by **loosely** based on these concepts? We literally mean, *loosely* based. Some examples might be a FPS where you throw forks at water balloons, an educational game about DNA cloning, or perhaps a platformer where you push and pull objects.
+![](https://lh3.ggpht.com/ETr5YlWLLfhzbDALwQd5stcfpyACirr4iJL5_n1APVLxnBYPp6Jv4N1mcwHBGCgo2Vg=w705)
 
-Your game. Your rules. You can participate as an individual or as a team. You're encouraged to use open source libraries, frameworks, graphics, and sounds.
 
-## Prizes
-
-We have 5 shiny new iPads with Retina displays (64GB wifi models) to give to our winners (or Apple Store Credit equivalent). Runners up will receive GitHub swag of their choice ($100 credit for the [GitHub Shop](http://shop.github.com/)). If you have a team submission, we'll give you Apple Store credit equal to the value of the iPad. You can split it with your teammates as appropriate.
-
-All of the winners and runners up will be showcased on our blog.
-
-<img src="http://i.imgur.com/lxZrD.png" style="border:0;">
-
-### Everyone's a winner!
-
-All participants will receive a limited edition [Coderwall](http://www.coderwall.com) badge as shown above. Winners and runners up will also get their own special version of it.
-
-## Judging
-
-We have a number of awesome judges who graciously volunteered to take a look at all the entries!
-
-* [David Czarnecki](http://twitter.com/CzarneckiD), Lead Engineer at Agora Games
-* [Eric Preisz](https://twitter.com/epreisz), CEO of GarageGames
-* [Matt Hackett](https://twitter.com/#!/richtaur), Co-founder of Lost Decade Games
-* [Lee Reilly](http://twitter.com/leereilly), Gamer Dad and Software Developer at GitHub
-* [Romana Ramzan](https://twitter.com/Manak/), Denki's Player Champion. PhD Researcher. Organiser of Scottish Game Jam.
-
-## Rules
-
-* To qualify for entry as an **individual** you must fork the [github/game-off-2012](https://github.com/github/game-off-2012) repository to your individual account
-* To qualify for entry as a **team** you must fork the [github/game-off-2012](https://github.com/github/game-off-2012) to a [free organization account](https://github.com/settings/organizations)
-* All entries must be web-based i.e. playable in a browser. HTML5, WebGL, Unity, Torque 3D, Node JS, Flash is all possible - just be sure the source is made available on your fork.
-* You must be over the age of 13
-
-## Instructions
-
-* If you don't already have a GitHub account, [sign up now](https://github.com/signup/free) - it's free!
-* Fork the [github/game-off-2012](https://github.com/github/game-off-2012) repository to your individual account (or to a free organization account)
-* Be sure to follow @github on Twitter for updates
-* Make sure your code is pushed to the master branch of before Dec 1st!
-* Make sure you have a README file with a brief description, what open source projects (if any) you used, and a screenshot.
-* Your repo should have a brief description and a URL where the game is playable entered into the fields shown below (this will make our judging process easier):
-
-![](https://img.skitch.com/20121010-x2ecpu95fi91us6hbfehg2dgit.png)
-
-Winners will be announced before Christmas :santa:
-
-# Comments / Questions / Help
-
-* New to Git, GitHub, and/or version control? Check out our [help documentation](https://help.github.com/) to get started!
-* Questions about Git/GitHub? Please email support@github.com and be sure to include 'GitHub Game Off' in the subject.
-* Questions specific to the GitHub Game Off? Please [create an issue](https://github.com/github/game-off-2012/issues/new). That will be the offical FAQ.
-* The official Twitter hashtag is [#ggo12](https://twitter.com/search/realtime?q=%23ggo12).
+![](https://lh3.ggpht.com/Zlo0TUcilKRVt6wUU-kEB_Fs7RQQZvMB8Noq5t_fijsWrNEYi4ixnsK1UxOveb1Ewso)
+![](https://lh3.ggpht.com/c3izXWl8GVlhQ9F2mvSrtawRXnJ5aA5CiyXLyloPcgUIkuIVajVT7_aaRrPVK5oPvb4)
